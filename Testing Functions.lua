@@ -8,6 +8,10 @@ dofile(script_path..'MIDI Functions.lua')
 
 local midi_editor  = reaper.MIDIEditor_GetActive()
 
+--- This is the simple version that haves no filter besides the last event. Easy to understand and if you want to check the difference in performance with my IterateMIDI function. Or if you want to filter yourself. 
+---@param MIDIstring string string with all MIDI events (use reaper.MIDI_GetAllEvts)
+---@param filter_midiend boolean Filter Last MIDI message (reaper automatically add a message when item ends 'CC123')
+---@return function
 function IterateAllMIDI(MIDIstring,filter_midiend) -- Should it iterate the last midi 123 ? it just say when the item ends 
     local MIDIlen = MIDIstring:len()
     if filter_midiend then MIDIlen = MIDIlen - 12 end
@@ -23,25 +27,35 @@ function IterateAllMIDI(MIDIstring,filter_midiend) -- Should it iterate the last
     end    
 end
 
----comment
+---Iterate the MIDI messages inside the string out of  reaper.MIDI_GetAllEvts. Returns offset, flags, ms, offset_count, stringPos. offset is offset from last midi event. flags is midi message reaper option like muted, selected.... ms is the midi message. offset_count is the offset in ppq from the start of the iteration (the start of the MIDI item or at start.stringPos(start.ppq and start.event_n dont affect this count)).  stringPos the position in the string for the next event. 
 ---@param MIDIstring string string with all MIDI events (use reaper.MIDI_GetAllEvts)
 ---@param miditype table Filter messages MIDI by message type. Table with multiple types or just a number. (Midi type values are defined in the firt 4 bits of the data byte ): Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; Something = 15. 
 ---@param ch table Filter messages MIDI by chnnale. Table with multiple channel or just a number.
 ---@param selected boolean Filter messages MIDI if they are selected in MIDI editor. true = only selected; false = only not selected; nil = either. 
 ---@param muted boolean Filter messages MIDI if they are muted in MIDI editor. true = only muted; false = only not muted; nil = either. 
 ---@param filter_midiend boolean Filter Last MIDI message (reaper automatically add a message when item ends 'CC123')
----@param start any
----@param backwards any
----@param step any
----@return function
-function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,backwards,step) -- Should it iterate the last midi 123 ? it just say when the item ends 
+---@param start table start is a table that determine where to start iterating in the midi evnts. The key determine the options: 'ppq','event_n','stringPos' the value determine the value to start. For exemple {ppq=960} will start at events that happen at and after 960 midi ticks after the start of the item. {event_n=5} will start at the fifth midi message (just count messages that pass the filters). {stringPos = 13} will start at the midi message in the 13 byte on the packed string.
+---@param step number will only return every number of step midi message (will only count messages that passes the filters). 
+---@return function 
+function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step) -- Should it iterate the last midi 123 ? it just say when the item ends 
     local MIDIlen = MIDIstring:len()
     if filter_midiend then MIDIlen = MIDIlen - 12 end
-    local iteration_stringPos = 1
+    -- start filter settings
+    local iteration_stringPos = start and start.stringPos or 1 -- the same as if start and start.stringPos then iteration_stringPos = start.stringPos else iteration_stringPos = 1 end
+    local event_n = 0 -- if start.event_n will count every message that passes all filters and will only start returning at event start.event_n 
+    local offset_count = 0
+    ----
+    local step_count = -1 -- only for using step
     return function ()
         while iteration_stringPos < MIDIlen do 
             local offset, flags, ms, stringPos = string.unpack("i4Bs4", MIDIstring, iteration_stringPos)
-            iteration_stringPos = stringPos
+            iteration_stringPos = stringPos -- set iteration_stringPos for next iteration
+            offset_count = offset_count + offset -- this returns the distance in ppq from each message from the start of the midi item or the first stringPos used
+
+            -- Start ppq filters: 
+            if start and start.ppq and offset_count < start.ppq   then -- events earlier than start.ppq
+                goto continue
+            end
             
             -- check midi type .
             if miditype then 
@@ -76,8 +90,22 @@ function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,
                 if not (msg_mute == muted) then goto continue end
             end
 
-            if true then -- hm I cant just put return in the middle of a function. But I decided to use goto as lua dont have continue. and if it is here it is allright. so if true then return end  
-                return  offset, flags, ms, stringPos
+            -- Start event n filter: --- it is at the end so will only count message that passed all other filters
+            if start and start.event_n then 
+                event_n = event_n + 1
+                if event_n < start.event_n then goto continue end -- if the event_n count is smaller than the desired event to start returning just continue to next
+            end
+
+            -- Step filter
+            if step then 
+                step_count = step_count + 1                
+                if step_count%step ~= 0 then goto continue end 
+            end
+
+            -- Passed All filters congrats!
+
+            if true then -- hm I cant just put return in the middle of a function. But I decided to use goto as lua dont have continue. and if it is here it is allright. so if true then return end 
+                return  offset, flags, ms, offset_count, stringPos
             end
 
             ::continue::
@@ -89,10 +117,11 @@ end
 
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstring = reaper.MIDI_GetAllEvts(take, "")
-    for offset, flags, ms, stringPos in IterateMIDI(MIDIstring,nil,{4,2,1},nil,nil,true) do
-        print('offset    :   '..offset)
-        print('flags    :   '..flags)
-        print('    ')
+    local oldstringPos = 1
+    for offset, flags, ms, offset_count, stringPos in IterateMIDI(MIDIstring,9,ch_nil,sel_nil,muted_nil,true,{ppq = 720},2) do
+        print('MIDI NOTE :  '..ms:byte(2))
+        print('ppq from stringPos 1 :  '..offset_count)
+        oldstringPos = stringPos
     end
 end
 print('----------------')
