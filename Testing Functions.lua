@@ -12,7 +12,7 @@ for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstring = reaper.MIDI_GetAllEvts(take, "")
     for offset, flags, ms, offset_count, stringPos in IterateMIDI(MIDIstring,{8,9},{1,3},true,false,true,{ppq = 420}) do -- Get all notes on and off on channel 1 and 3 if they are selected not muted and after ppq 420 
         print('MIDI NOTE :  '..ms:byte(2))
-        print('ppq from stringPos 1 :  '..offset_count)
+        print('ppq from item start :  '..offset_count)
     end
 end
 print('----------------')
