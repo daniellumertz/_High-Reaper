@@ -156,16 +156,11 @@ end
 function CreateMIDITable(MIDIstring)
     local t = { }
     for offset, offset_count, flags, msg, stringPos in IterateAllMIDI(MIDIstring,false) do -- should I remove the last val?
-        local type, ch, val1, val2, text = UnpackMIDIMessage(msg)
         t[#t+1] = {}
         t[#t].offset = offset
         t[#t].offset_count = offset_count
         t[#t].flags = flags
-        t[#t].msg = {type = type,
-                    ch = ch,
-                    val1 = val1,
-                    val2 = val2,
-                    text = text}
+        t[#t].msg = msg
         t[#t].stringPos = stringPos -- just for the sake of it (probably wont going to use)
     end
     return t
@@ -309,27 +304,11 @@ function InsertMIDI(midi_table,ppq,midi_msg,flags)
     -- calculate dif of prev event and next evt 
     local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
     --create the midi midi_msg table
-    local type, ch, val1, val2, text
-    if type(midi_msg) == 'string' then
-        type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
-    elseif type(midi_msg) == 'table' then
-        type = midi_msg.type
-        ch = midi_msg.ch
-        val1 = midi_msg.val1
-        val2 = midi_msg.val2
-        text = midi_msg.text
-    end
     local msg_table = {
         offset = dif_prev,
         offset_count = ppq,
         flags = flags,
-        msg  = {
-            {type = type,
-            ch = ch,
-            val1 = val1,
-            val2 = val2,
-            text = text}
-        }
+        msg  = midi_msg
     }
     --adjust next midi message offset
     if midi_table[last_idx+1] then
