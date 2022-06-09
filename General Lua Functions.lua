@@ -76,4 +76,3 @@ function BitTabtoStr2(t, len) -- transform an BitTab in a String
     return s
 end
 
-

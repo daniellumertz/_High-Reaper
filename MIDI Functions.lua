@@ -156,12 +156,16 @@ end
 function CreateMIDITable(MIDIstring)
     local t = { }
     for offset, offset_count, flags, msg, stringPos in IterateAllMIDI(MIDIstring,false) do -- should I remove the last val?
-        --local type, ch, val1, val2, text = UnpackMIDIMessage(msg)
+        local type, ch, val1, val2, text = UnpackMIDIMessage(msg)
         t[#t+1] = {}
         t[#t].offset = offset
         t[#t].offset_count = offset_count
         t[#t].flags = flags
-        t[#t].msg = msg
+        t[#t].msg = {type = type,
+                    ch = ch,
+                    val1 = val1,
+                    val2 = val2,
+                    text = text}
         t[#t].stringPos = stringPos -- just for the sake of it (probably wont going to use)
     end
     return t
@@ -173,7 +177,13 @@ end
 function PackMIDITable(midi_table)
     local packed_table = {}
     for i, value in pairs(midi_table) do
-        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, midi_table[i].msg) 
+        local packed_midi
+        if midi_table[i].msg.type == 15 then -- this message is text
+            packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1,midi_table[i].msg.text) -- Pack MIDI Text
+        else
+            packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1, midi_table[i].msg.val2) -- Pack MIDI not text
+        end
+        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, packed_midi) 
     end
     return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
 end
@@ -254,18 +264,25 @@ function UnpackMIDIMessage(msg)
         text = msg:sub(3)
     end
 
-    return msg_type,msg_ch,t[2],t[3],text,t
+    local val1 = t[2]
+    local val2 = (msg_type ~= 15) and t[3] -- return nil if is text
+    return msg_type,msg_ch,val1,val2,text,t
 end
 
----Receives numbers(0-255) and return them in a string as bytes
+---Receives numbers(0-255). or strings. and return them in a string as bytes
 ---@param ... number
 ---@return string
 function PackMessage(...)
     local t = {...}
     local msg = ''
     for i, v in ipairs( { ... } ) do
-       local new_val = string.pack('B',v)
-      msg = msg..new_val
+        local new_val
+        if type(v) == 'number' then 
+            new_val = string.pack('B',v)
+        elseif type(v) == 'string' then -- In case it is a string (useful for midi text where each byte is a character)
+            new_val = v
+        end
+        msg = msg..new_val
     end
     return msg
 end
@@ -273,7 +290,7 @@ end
 ---Pack a midi message in a string form. Each character is a midi byte. Can receive as many data bytes needed. Just join midi_type and midi_ch in the status bytes and thow it in PackMessage. 
 ---@param midi_type number midi message type: Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; text = 15.
 ---@param midi_ch number midi ch 1-16 (1 based.)
----@param ... number sequence of data bytes 
+---@param ... number sequence of data bytes can be number (will be converted to string(a character with the equivalent byte)) or can be a string that will be added to the message (useful for midi text where each byte is a character).
 function PackMIDIMessage(midi_type,midi_ch,...)
     local midi_ch = midi_ch - 1 -- make it 0 based
     local status_byte = (midi_type*16)+midi_ch -- where is your bitwise operation god now?
@@ -295,11 +312,27 @@ function InsertMIDI(midi_table,ppq,midi_msg,flags)
     -- calculate dif of prev event and next evt 
     local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
     --create the midi midi_msg table
+    local type, ch, val1, val2, text
+    if type(midi_msg) == 'string' then
+        type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
+    elseif type(midi_msg) == 'table' then
+        type = midi_msg.type
+        ch = midi_msg.ch
+        val1 = midi_msg.val1
+        val2 = midi_msg.val2
+        text = midi_msg.text
+    end
     local msg_table = {
         offset = dif_prev,
         offset_count = ppq,
         flags = flags,
-        msg  = midi_msg
+        msg  = {
+            {type = type,
+            ch = ch,
+            val1 = val1,
+            val2 = val2,
+            text = text}
+        }
     }
     --adjust next midi message offset
     if midi_table[last_idx+1] then
