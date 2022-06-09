@@ -156,6 +156,7 @@ end
 function CreateMIDITable(MIDIstring)
     local t = { }
     for offset, offset_count, flags, msg, stringPos in IterateAllMIDI(MIDIstring,false) do -- should I remove the last val?
+        --local type, ch, val1, val2, text = UnpackMIDIMessage(msg)
         t[#t+1] = {}
         t[#t].offset = offset
         t[#t].offset_count = offset_count
@@ -238,6 +239,7 @@ end
 ---@return number data2 databyte1 -- like note pitch, cc num
 ---@return number data3 databyte2 -- like note velocity, cc val. Some midi messages dont have databyte2 and this will return nill. For getting the value of the pitchbend do databyte1 + databyte2
 ---@return table allbytes all bytes in a table in order, starting with statusbyte. usefull for longer midi messages like text
+---@return string text if message is a text return the text
 function UnpackMIDIMessage(msg)
     local msg_len = msg:len()
     local pattern = string.rep('B',msg_len)
@@ -247,7 +249,12 @@ function UnpackMIDIMessage(msg)
     local msg_type = msg:byte(1)>>4
     local msg_ch = (msg:byte(1)&0x0F)+1 --msg:byte(1)&0x0F -- 0x0F = 0000 1111 in binary. this is a bitmask. +1 to be 1 based
 
-    return msg_type,msg_ch,t[2],t[3],t
+    local text
+    if msg_type == 15 then
+        text = msg:sub(3)
+    end
+
+    return msg_type,msg_ch,t[2],t[3],text,t
 end
 
 ---Receives numbers(0-255) and return them in a string as bytes

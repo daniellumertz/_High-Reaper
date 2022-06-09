@@ -6,7 +6,6 @@ local script_path = info.source:match[[^@?(.*[\/])[^\/]-$]] -- this script folde
 dofile(script_path..'General Lua Functions.lua')
 dofile(script_path..'MIDI Functions.lua')
 
-
 local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstring = reaper.MIDI_GetAllEvts(take, "")
