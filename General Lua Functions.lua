@@ -61,7 +61,7 @@ function ToBits(num,reverse)
     end 
     if #t == 0 then table.insert(t,0) end
     local binary_string = table.concat(t)
-    if reverse then binary_string:reverse() end
+    if reverse then binary_string = binary_string:reverse() end
     return binary_string
 end
 

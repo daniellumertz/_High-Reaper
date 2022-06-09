@@ -7,12 +7,27 @@ dofile(script_path..'General Lua Functions.lua')
 dofile(script_path..'MIDI Functions.lua')
 
 
+function PackMIDIMessage(...)
+    local t = {...}
+    local ms = ''
+    local pattern = string.rep('B',#t)
+    for i, v in ipairs( { ... } ) do
+      string.pack('B',v)
+      ms = ms..new_val
+    end
+    return ms
+end
+
 local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstring = reaper.MIDI_GetAllEvts(take, "")
-    local midi_table = CreateMIDITable(MIDIstring)
-    tprint(midi_table,1)
+    for offset, offset_count, flags, ms, event_count, stringPos in IterateMIDI(MIDIstring,15) do
 
+        local t,ch,pitch,vel,all = UnpackMIDIMessage(ms)
+        tprint(all)
+
+
+    end
 end
 
 print('----------------')

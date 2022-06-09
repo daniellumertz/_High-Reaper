@@ -35,15 +35,15 @@ end
 
 ---Iterate the MIDI messages inside the string out of  reaper.MIDI_GetAllEvts. Returns offset, flags, ms, offset_count, stringPos. offset is offset from last midi event. flags is midi message reaper option like muted, selected.... ms is the midi message. offset_count is the offset in ppq from the start of the iteration (the start of the MIDI item or at start.stringPos(start.ppq and start.event_n dont affect this count)). event_count is the event nº between all MIDI events. stringPos the position in the string for the next event. 
 ---@param MIDIstring string string with all MIDI events (use reaper.MIDI_GetAllEvts)
----@param miditype table Filter messages MIDI by message type. Table with multiple types or just a number. (Midi type values are defined in the firt 4 bits of the data byte ): Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; Something = 15. 
+---@param miditype table Filter messages MIDI by message type. Table with multiple types or just a number. (Midi type values are defined in the firt 4 bits of the data byte ): Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; text = 15. 
 ---@param ch table Filter messages MIDI by chnnale. Table with multiple channel or just a number.
 ---@param selected boolean Filter messages MIDI if they are selected in MIDI editor. true = only selected; false = only not selected; nil = either. 
 ---@param muted boolean Filter messages MIDI if they are muted in MIDI editor. true = only muted; false = only not muted; nil = either. 
 ---@param filter_midiend boolean Filter Last MIDI message (reaper automatically add a message when item ends 'CC123')
 ---@param start table start is a table that determine where to start iterating in the midi evnts. The key determine the options: 'ppq','event_n','stringPos' the value determine the value to start. For exemple {ppq=960} will start at events that happen at and after 960 midi ticks after the start of the item. {event_n=5} will start at the fifth midi message (just count messages that pass the filters). {stringPos = 13} will start at the midi message in the 13 byte on the packed string.
 ---@param step number will only return every number of step midi message (will only count messages that passes the filters). 
----@return function 
-function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step) 
+---@return function -- offset, offset_count, flags, ms, event_count, stringPos
+function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step)
     local MIDIlen = MIDIstring:len()
     if filter_midiend then MIDIlen = MIDIlen - 12 end
     -- start filter settings
@@ -77,7 +77,7 @@ function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,
             
             -- check channel.
             if ch then  
-                local msg_ch = ms:byte(1)&0x0F -- 0x0F = 0000 1111 in binary . ms is decimal. & is an and bitwise operation "have to have 1 in both to be 1". Will return channel as a decimal number. 0 based
+                local msg_ch = ms:byte(1)&0x0F -- 0x0F = 0000 1111 in binary . ms is string. & is an and bitwise operation "have to have 1 in both to be 1". Will return channel as a decimal number. 0 based
                 msg_ch = msg_ch + 1 -- makes it 1 based
                 if type(ch) == "table" then -- if ch is a table with all ch to get
                     if not TableHaveValue(ch, msg_ch) then goto continue end 
@@ -146,7 +146,7 @@ end
 ---@return table
 function CreateMIDITable(MIDIstring)
     local t = { }
-    for offset, offset_count, flags, ms, stringPos in IterateAllMIDI(MIDIstring,true) do
+    for offset, offset_count, flags, ms, stringPos in IterateAllMIDI(MIDIstring,false) do -- should I remove the last val?
         t[#t+1] = {}
         t[#t].offset = offset
         t[#t].offset_count = offset_count
@@ -156,6 +156,61 @@ function CreateMIDITable(MIDIstring)
     end
     return t
 end
+
+---This function get the midi_table and return it to string packed formated to be feeded at MIDI_SetAllEvts
+---@param midi_table any
+---@return string
+function PackMIDITable(midi_table)
+    local packed_table = {}
+    for i, value in pairs(midi_table) do
+        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, midi_table[i].msg) 
+    end
+    return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
+end
+
+---Unpack a packed string MIDI message in different values
+---@param ms string midi as packed string
+---@return number msg_type midi message type: Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; text = 15. 
+---@return number msg_ch midi message channel
+---@return number data2 databyte1 -- like note pitch, cc num
+---@return number data3 databyte2 -- like note velocity, cc val. Some midi messages dont have databyte2 and this will return nill. For getting the value of the pitchbend do databyte1 + databyte2
+---@return table allbytes all bytes in a table in order, starting with statusbyte. usefull for longer midi messages like text
+function UnpackMIDIMessage(ms)
+    local ms_len = ms:len()
+    local pattern = string.rep('B',ms_len)
+    local t = {string.unpack(pattern,ms)}
+    table.remove(t) -- remove last element (it is just concerned with the last character in string.unpack)
+
+    local msg_type = ms:byte(1)>>4
+    local msg_ch = (ms:byte(1)&0x0F)+1 --ms:byte(1)&0x0F -- 0x0F = 0000 1111 in binary. this is a bitmask. +1 to be 1 based
+
+    return msg_type,msg_ch,t[2],t[3],t
+end
+
+---Receives numbers(0-255) and return them in a string as bytes
+---@param ... number
+---@return string
+function PackMessage(...)
+    local t = {...}
+    local ms = ''
+    for i, v in ipairs( { ... } ) do
+       local new_val = string.pack('B',v)
+      ms = ms..new_val
+    end
+    return ms
+end
+
+---Pack a midi message in a string form. Each character is a midi byte. Can receive as many data bytes needed. Just join midi_type and midi_ch in the status bytes and thow it in PackMessage. 
+---@param midi_type number midi message type: Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; text = 15.
+---@param midi_ch number midi ch 1-16 (1 based.)
+---@param ... number sequence of data bytes 
+function PackMIDIMessage(midi_type,midi_ch,...)
+    local midi_ch = midi_ch - 1 -- make it 0 based
+    local status_byte = (midi_type*16)+midi_ch -- where is your bitwise operation god now?
+    return PackMessage(status_byte,...)
+end
+
+
 ---Insert a midi msg at ppq in the midi_table
 ---@param midi_table table table with all midi events
 ---@param pqp number when in ppq insert the message
@@ -179,6 +234,9 @@ function InsertMIDI(midi_table,ppq,msg,flags)
     table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
 end
 
+---comment
+---@param midi_table  table table with all midi events
+---@param event_n number event number
 function DeleteMIDI(midi_table,event_n)
     local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,event_n - 1 , event_n.offset_count)
     if midi_table[event_n+1] then
