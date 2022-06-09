@@ -177,12 +177,7 @@ end
 function PackMIDITable(midi_table)
     local packed_table = {}
     for i, value in pairs(midi_table) do
-        local packed_midi
-        if midi_table[i].msg.type == 15 then -- this message is text
-            packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1,midi_table[i].msg.text) -- Pack MIDI Text
-        else
-            packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1, midi_table[i].msg.val2) -- Pack MIDI not text
-        end
+        local packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1, midi_table[i].msg.val2,midi_table[i].msg.text) -- Pack MIDI not text
         packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, packed_midi) 
     end
     return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
@@ -281,6 +276,8 @@ function PackMessage(...)
             new_val = string.pack('B',v)
         elseif type(v) == 'string' then -- In case it is a string (useful for midi text where each byte is a character)
             new_val = v
+        elseif not v then -- in case some of the messages is nil. No problem! This is useful as PackMIDITable will send .val2 and .text. not all midi have val2 and not all midi have .text
+            new_val = ''
         end
         msg = msg..new_val
     end
