@@ -1,4 +1,4 @@
-dofile("C:/Users/DSL/AppData/Roaming/REAPER/Scripts/Meus/Debug VS/DL Debug.lua")
+--dofile("C:/Users/DSL/AppData/Roaming/REAPER/Scripts/Meus/Debug VS/DL Debug.lua")
 
 local info = debug.getinfo(1,'S')
 local script_path = info.source:match[[^@?(.*[\/])[^\/]-$]] -- this script folder
@@ -15,7 +15,9 @@ for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstr = reaper.MIDI_GetAllEvts(take)
     local midi_table = CreateMIDITable(MIDIstr)
     for i = 1, #midi_table do
-        midi_table[i].msg.val1 = midi_table[i].msg.val1 + 1
+        if midi_table[i].msg.type == 8 or midi_table[i].msg.type == 9 then
+            midi_table[i].msg.val1 = midi_table[i].msg.val1 + 1
+        end
         cnt = cnt+ 1
     end
     local midi_packed = PackMIDITable(midi_table)
