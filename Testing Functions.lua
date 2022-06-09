@@ -21,7 +21,7 @@ for take in enumMIDITakes(midi_editor, true) do
             if type == 9 or type == 8 then
                 val1 = val1 +1
             end    
-            print(ch)
+
             local new = PackMIDIMessage(type,ch,val1,val2)
             midi_table[i].msg = new
         end
