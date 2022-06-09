@@ -14,6 +14,9 @@ local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstr = reaper.MIDI_GetAllEvts(take)
     local midi_table = CreateMIDITable(MIDIstr)
+    for i = 1, #midi_table do
+        midi_table[i].msg.val1 = midi_table[i].msg.val1 + 1
+    end
     local midi_packed = PackMIDITable(midi_table)
     print(#midi_table)
     reaper.MIDI_SetAllEvts(take, midi_packed)
