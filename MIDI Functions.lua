@@ -163,7 +163,7 @@ end
 function PackMIDITable(midi_table)
     local packed_table = {}
     for i, value in pairs(midi_table) do
-        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, midi_table[i].msg) 
+        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, midi_table[i].ms) 
     end
     return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
 end
@@ -226,10 +226,12 @@ function InsertMIDI(midi_table,ppq,msg,flags)
         offset = dif_prev,
         offset_count = ppq,
         flags = flags,
-        msg  = msg
+        ms  = msg
     }
     --adjust next midi message offset
-    midi_table[last_idx+1].offset = dif_next
+    if midi_table[last_idx+1] then
+        midi_table[last_idx+1].offset = dif_next
+    end
     --insert it 
     table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
 end
@@ -259,17 +261,17 @@ function BinarySearchInMidiTable(midi_table,ppq)
     -- Try to find in between values
     while true do
         -- check if is between midi_table and midi_table[i+1]
-        if midi_table[i+1] and midi_table[i].offset_count <= ppq and ppq < midi_table[i+1].offset_count then return i end -- check if it is in between two values
+        if midi_table[i+1] and midi_table[i].offset_count <= ppq and ppq <= midi_table[i+1].offset_count then return i end -- check if it is in between two values
 
         -- change the i (this is not the correct answer)
         if midi_table[i].offset_count > ppq then
+            ceil = i
             i = ((i - floor) / 2) + floor
             i = math.floor(i)
-            ceil = i
         elseif midi_table[i].offset_count < ppq then
+            floor = i
             i = ((ceil - i) / 2) + floor
             i = math.ceil(i)
-            floor = i
         end    
     end
 end
