@@ -8,24 +8,28 @@ dofile(script_path..'MIDI Functions.lua')
 
 start = reaper.time_precise()
 
-local cnt = 0
+--local cnt = 0
 
 local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstr = reaper.MIDI_GetAllEvts(take)
     local midi_table = CreateMIDITable(MIDIstr)
-    for i2 = 1 ,10 do
+    for i2 = 1, 10 do
         for i = 1, #midi_table do
-            if midi_table[i].msg.type == 8 or midi_table[i].msg.type == 9 then
-                midi_table[i].msg.val1 = midi_table[i].msg.val1 + 1
-            end
-            cnt = cnt+ 1
+            local type,ch,val1,val2,all = UnpackMIDIMessage(midi_table[i].msg)
+
+            if type == 9 or type == 8 then
+                val1 = val1 +1
+            end    
+            print(ch)
+            local new = PackMIDIMessage(type,ch,val1,val2)
+            midi_table[i].msg = new
         end
     end
     local midi_packed = PackMIDITable(midi_table)
     reaper.MIDI_SetAllEvts(take, midi_packed)
 end
-print(cnt)
+--print(cnt)
 
 
 
