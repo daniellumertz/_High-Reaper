@@ -18,18 +18,22 @@ function IterateAllMIDI(MIDIstring,filter_midiend) -- Should it iterate the last
     local MIDIlen = MIDIstring:len()
     if filter_midiend then MIDIlen = MIDIlen - 12 end
     local iteration_stringPos = 1
+    local offset_count = 0
+
     return function ()
         if iteration_stringPos < MIDIlen then 
             local offset, flags, ms, stringPos = string.unpack("i4Bs4", MIDIstring, iteration_stringPos)
             iteration_stringPos = stringPos
-            return  offset, flags, ms, stringPos
+            offset_count = offset + offset_count
+
+            return  offset, offset_count, flags, ms, stringPos
         else -- Ends the iteration
             return nil 
         end 
     end    
 end
 
----Iterate the MIDI messages inside the string out of  reaper.MIDI_GetAllEvts. Returns offset, flags, ms, offset_count, stringPos. offset is offset from last midi event. flags is midi message reaper option like muted, selected.... ms is the midi message. offset_count is the offset in ppq from the start of the iteration (the start of the MIDI item or at start.stringPos(start.ppq and start.event_n dont affect this count)).  stringPos the position in the string for the next event. 
+---Iterate the MIDI messages inside the string out of  reaper.MIDI_GetAllEvts. Returns offset, flags, ms, offset_count, stringPos. offset is offset from last midi event. flags is midi message reaper option like muted, selected.... ms is the midi message. offset_count is the offset in ppq from the start of the iteration (the start of the MIDI item or at start.stringPos(start.ppq and start.event_n dont affect this count)). event_count is the event nº between all MIDI events. stringPos the position in the string for the next event. 
 ---@param MIDIstring string string with all MIDI events (use reaper.MIDI_GetAllEvts)
 ---@param miditype table Filter messages MIDI by message type. Table with multiple types or just a number. (Midi type values are defined in the firt 4 bits of the data byte ): Note Off = 8; Note On = 9; Aftertouch = 10; CC = 11; Program Change = 12; Channel Pressure = 13; Pitch Vend = 14; Something = 15. 
 ---@param ch table Filter messages MIDI by chnnale. Table with multiple channel or just a number.
@@ -39,12 +43,13 @@ end
 ---@param start table start is a table that determine where to start iterating in the midi evnts. The key determine the options: 'ppq','event_n','stringPos' the value determine the value to start. For exemple {ppq=960} will start at events that happen at and after 960 midi ticks after the start of the item. {event_n=5} will start at the fifth midi message (just count messages that pass the filters). {stringPos = 13} will start at the midi message in the 13 byte on the packed string.
 ---@param step number will only return every number of step midi message (will only count messages that passes the filters). 
 ---@return function 
-function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step) -- Should it iterate the last midi 123 ? it just say when the item ends 
+function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step) 
     local MIDIlen = MIDIstring:len()
     if filter_midiend then MIDIlen = MIDIlen - 12 end
     -- start filter settings
     local iteration_stringPos = start and start.stringPos or 1 -- the same as if start and start.stringPos then iteration_stringPos = start.stringPos else iteration_stringPos = 1 end
-    local event_n = 0 -- if start.event_n will count every message that passes all filters and will only start returning at event start.event_n 
+    local event_n = 0 -- if start.event_n will count every message that passes all filters and will only start returning at event start.event_n
+    local event_count = 0 -- event count will return the event count nº between all midi events
     local offset_count = 0
     ----
     local step_count = -1 -- only for using step
@@ -53,6 +58,7 @@ function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,
             local offset, flags, ms, stringPos = string.unpack("i4Bs4", MIDIstring, iteration_stringPos)
             iteration_stringPos = stringPos -- set iteration_stringPos for next iteration
             offset_count = offset_count + offset -- this returns the distance in ppq from each message from the start of the midi item or the first stringPos used
+            event_count = event_count +1
 
             -- Start ppq filters: 
             if start and start.ppq and offset_count < start.ppq   then -- events earlier than start.ppq
@@ -107,7 +113,7 @@ function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,
             -- Passed All filters congrats!
 
             if true then -- hm I cant just put return in the middle of a function. But I decided to use goto as lua dont have continue. and if it is here it is allright. so if true then return end 
-                return  offset, flags, ms, offset_count, stringPos
+                return  offset, offset_count, flags, ms, event_count, stringPos
             end
 
             ::continue::
@@ -118,18 +124,116 @@ end
 
 function IterateMIDIBackwards(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step)
     local t = {}
-    for offset, flags, ms, offset_count, stringPos in IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step) do
+    for offset, offset_count, flags, ms, event_count, stringPos in IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,step) do
         t[#t+1] = {}
         t[#t].offset = offset
         t[#t].flags = flags
         t[#t].ms = ms
         t[#t].offset_count = offset_count
+        t[#t].event_count = event_count
         t[#t].stringPos = stringPos
     end
     local i = #t+1
     return function ()
         i = i - 1
         if i == 0 then return nil end
-        return t[i].offset,t[i].flags,t[i].ms,t[i].offset_count,t[i].stringPos
+        return t[i].offset,t[i].offset_count,t[i].flags,t[i].ms,t[i].event_count,t[i].stringPos
     end
+end
+
+---Receives MIDIstring and returns a table user use to insert, set, delete, modify events. Each key is corresponds to a midi message they are in a table with .offset .offset_Count . flags . ms. After done pack each message and concat the table and MIDI_SetAllEvts. 
+---@param MIDIstring any
+---@return table
+function CreateMIDITable(MIDIstring)
+    local t = { }
+    for offset, offset_count, flags, ms, stringPos in IterateAllMIDI(MIDIstring,true) do
+        t[#t+1] = {}
+        t[#t].offset = offset
+        t[#t].offset_count = offset_count
+        t[#t].flags = flags
+        t[#t].ms = ms
+        t[#t].stringPos = stringPos -- just for the sake of it (probably wont going to use)
+    end
+    return t
+end
+---Insert a midi msg at ppq in the midi_table
+---@param midi_table table table with all midi events
+---@param pqp number when in ppq insert the message
+---@param msg string midi message packed. 
+function InsertMIDI(midi_table,ppq,msg,flags)
+    --Get idx of prev event
+    local last_idx = BinarySearchInMidiTable(midi_table,ppq)
+    local insert_idx = last_idx + 1
+    -- calculate dif of prev event and next evt 
+    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
+    --create the midi msg table
+    local msg_table = {
+        offset = dif_prev,
+        offset_count = ppq,
+        flags = flags,
+        msg  = msg
+    }
+    --adjust next midi message offset
+    midi_table[last_idx+1].offset = dif_next
+    --insert it 
+    table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
+end
+
+function DeleteMIDI(midi_table,event_n)
+    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,event_n - 1 , event_n.offset_count)
+    if midi_table[event_n+1] then
+        midi_table[event_n+1].offset = dif_prev + dif_next
+    end
+    table.remove(midi_table,event_n)
+end
+
+---Perform a binary searach on the midi_table to find the message that comes before on in time with ppq argument.Return the last value: 0 if is before the first value, 1 if val1<=ppq<val2, 2 val<=ppq<val3. Insert the Midi message at index result+1.
+---@param midi_table any
+---@param ppq any
+---@return number
+function BinarySearchInMidiTable(midi_table,ppq)
+    local floor = 1
+    local ceil = #midi_table
+    local i = math.floor(ceil/2)
+    -- Try to get in the edges after the max value and before the min value
+    if midi_table[#midi_table].offset_count <= ppq then return #midi_table end -- check if it is after the last midi_table value 
+    if midi_table[1].offset_count > ppq then return 0 end --check if is before the first value. return 0 if it is
+    -- Try to find in between values
+    while true do
+        -- check if is between midi_table and midi_table[i+1]
+        if midi_table[i+1] and midi_table[i].offset_count <= ppq and ppq < midi_table[i+1].offset_count then return i end -- check if it is in between two values
+
+        -- change the i (this is not the correct answer)
+        if midi_table[i].offset_count > ppq then
+            i = ((i - floor) / 2) + floor
+            i = math.floor(i)
+            ceil = i
+        elseif midi_table[i].offset_count < ppq then
+            i = ((ceil - i) / 2) + floor
+            i = math.ceil(i)
+            floor = i
+        end    
+    end
+end
+
+---Calculate the ppq diference from ppq and midi_table[last_idx] and 
+---@param midi_table table
+---@param last_idx number
+---@param ppq number
+---@return number
+---@return number
+function CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
+    local dif_prev, dif_next
+    if last_idx > 0 then -- calculate the difference of the previous message. check if there is a previous element
+        dif_prev = ppq - midi_table[last_idx].offset_count -- alternative is to calculate using just offset of the next message - dif prev message. this way is faster
+    else 
+        dif_prev = ppq --return ppq as is the offset from the item start
+    end
+
+    if last_idx < #midi_table then --calculate the difference to the next message. check if there is a next element.
+        dif_next = midi_table[last_idx+1].offset_count - ppq 
+    else
+        dif_next = 0
+    end
+    return dif_prev, dif_next
 end
