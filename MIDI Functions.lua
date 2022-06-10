@@ -431,3 +431,33 @@ function PackFlags(selected, muted, curve_shape)
     flags = flags|(muted and 2 or 0)|(selected and 1 or 0) -- if selected or muted are true return number. this is a OR operation flags|2or0|1or0 (2 = 10 ; 1 = 1)
     return flags
 end
+
+
+---------------------
+----------------- MIDI Ticks Table
+---------------------
+
+-- From JS
+
+function CreateTickTable()
+    -- After creating use like print(tTimeFromTick[take][960]) if it dont already have the value it will create and return. 
+    local tTimeFromTick = {} 
+    local tTickFromTime = {}
+    setmetatable(tTimeFromTick, {__index = function(t, take) t[take] = setmetatable({}, {__index = function(tt, tick) 
+                                                                                                    local time = reaper.MIDI_GetProjTimeFromPPQPos(take, tick + 0) -- TODO Make it work with Start in source (Start offset) Originally this 0 did the trick
+                                                                                                    tt[tick] = time
+                                                                                                    tTickFromTime[take][time] = tick
+                                                                                                    return time 
+                                                                                                end
+                                                                                        }) return t[take] end})
+                                                                                        
+    setmetatable(tTickFromTime, {__index = function(t, take) t[take] = setmetatable({}, {__index = function(tt, time) 
+                                                                                                    local tick = reaper.MIDI_GetPPQPosFromProjTime(take, time) - 0 -- TODO Make it work with Start in source (Start offset) Originally this 0 did the trick
+                                                                                                    tt[time] = tick
+                                                                                                    tTimeFromTick[take][tick] = time
+                                                                                                    return tick 
+                                                                                                end
+                                                                                        }) return t[take] end})
+
+    return tTimeFromTick, tTickFromTime -- Return related to project time
+end
