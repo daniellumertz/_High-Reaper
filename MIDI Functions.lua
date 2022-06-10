@@ -437,9 +437,7 @@ end
 ----------------- MIDI Ticks Table
 ---------------------
 
--- From JS
-
-function CreateTickTable()
+function CreateTickTable() -- From JS Multitool THANKS THANKS THANKS!
     -- After creating use like print(tTimeFromTick[take][960]) if it dont already have the value it will create and return. 
     local tTimeFromTick = {} 
     local tTickFromTime = {}
