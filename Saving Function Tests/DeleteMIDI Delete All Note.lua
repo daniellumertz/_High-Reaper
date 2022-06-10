@@ -14,24 +14,17 @@ local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstr = reaper.MIDI_GetAllEvts(take)
     local midi_table = CreateMIDITable(MIDIstr)
-    local cnt = 0
-    local new_midi_table = {}
-    for i = 1, #midi_table  do
-        if midi_table[i].flags.selected and midi_table[i].msg.val1 ~= 123 then
-            InsertMIDI(new_midi_table,midi_table[i].offset_count,midi_table[i].msg,midi_table[i].flags)
-            InsertMIDI(new_midi_table,midi_table[i].offset_count+960,midi_table[i].msg,midi_table[i].flags)
-        else 
-            InsertMIDI(new_midi_table,midi_table[i].offset_count,midi_table[i].msg,midi_table[i].flags)
+    for i = #midi_table-1, 1, -1 do
+        if midi_table[i] and (midi_table[i].msg.type == 9 or midi_table[i].msg.type == 8) then
+            DeleteMIDI(midi_table,i)
         end
     end
-    local midi_packed = PackMIDITable(new_midi_table)
+    local midi_packed = PackMIDITable(midi_table)
     reaper.MIDI_SetAllEvts(take, midi_packed)
 end
 --print(cnt)
 
---[[             print(960*cnt)
-SetMIDI(midi_table,i,960*cnt,nil,nil)
-cnt = cnt + 1 ]]
+
 
 print(reaper.time_precise() - start)
 print('----------------')

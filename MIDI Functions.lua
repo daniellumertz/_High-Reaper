@@ -269,10 +269,17 @@ end
 ---@param midi_msg string midi message packed. 
 function InsertMIDI(midi_table,ppq,midi_msg,flags)
     --Get idx of prev event
-    local last_idx = BinarySearchInMidiTable(midi_table,ppq)
+    local last_idx, dif_prev, dif_next
+    if #midi_table > 0 then
+        last_idx = BinarySearchInMidiTable(midi_table,ppq)
+        -- calculate dif of prev event and next evt 
+        dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
+    else
+        dif_prev, dif_next = ppq, 0
+        last_idx = 0
+    end
     local insert_idx = last_idx + 1
-    -- calculate dif of prev event and next evt 
-    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
+
     --create the midi midi_msg table
     if type(midi_msg) == 'string' then -- If put midi msg packed. but please dont! 
         local midi_type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
@@ -313,9 +320,8 @@ end
 ---@param midi_table  table table with all midi events
 ---@param event_n number event number
 function DeleteMIDI(midi_table,event_n)
-    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,event_n - 1 , midi_table[event_n].offset_count)
     if midi_table[event_n+1] then
-        midi_table[event_n+1].offset = dif_prev + dif_next
+        midi_table[event_n+1].offset = midi_table[event_n].offset + midi_table[event_n+1].offset 
     end
     table.remove(midi_table,event_n)
 end
