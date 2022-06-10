@@ -42,8 +42,29 @@ function TableHaveValue(tab, val) -- Check if table have val in the values. (Use
     return false
 end
 
+---Simple Table Copy. Very Fast!. Dont return string keys ! Return Tables within tables! Dont return recursive tables. Dont know what it does with metatables
+---@param t table
+---@return table
+function TableCopy(t) -- From http://lua-users.org/wiki/CopyTable
+  return {table.unpack(t)}
+end
 
-
+---Create a copy of the tablee with all children tables new as well. 
+---@param thing any
+---@return table
+function table_copy_regressive(thing)
+  if type(thing) == 'table' then
+      local new_table = {}
+      for k , v in pairs(thing) do
+          local new_v = table_copy_regressive(v)
+          local new_k = table_copy_regressive(k)
+          new_table[new_k] = new_v
+      end
+      return new_table
+  else 
+      return thing
+  end
+end
 ---------------------
 ----------------- Bit
 ---------------------

@@ -258,6 +258,88 @@ function CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
     end
     return dif_prev, dif_next
 end
+
+---------------------
+----------------- MIDI Table Handling 
+---------------------
+
+---Insert a midi midi_msg at ppq in the midi_table
+---@param midi_table table table with all midi events
+---@param pqp number when in ppq insert the message
+---@param midi_msg string midi message packed. 
+function InsertMIDI(midi_table,ppq,midi_msg,flags)
+    --Get idx of prev event
+    local last_idx = BinarySearchInMidiTable(midi_table,ppq)
+    local insert_idx = last_idx + 1
+    -- calculate dif of prev event and next evt 
+    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
+    --create the midi midi_msg table
+    if type(midi_msg) == 'string' then -- If put midi msg packed. but please dont! 
+        local midi_type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
+        midi_msg = {
+            type = midi_type,
+            ch = ch,
+            val1 = val1,
+            val2 = val2,
+            text = text
+        }
+    end
+    --create the midi midi_msg table
+    if type(flags) == 'number' then -- If put flag packed. but please dont! 
+        local selected, muted, curve_shape = UnpackFlags(flags)
+        flags = {
+            selected = selected,
+            muted = muted,
+            curve_shape = curve_shape
+        }
+    end
+
+    --create the msg table
+    local msg_table = {
+        offset = dif_prev,
+        offset_count = ppq,
+        flags = table_copy_regressive(flags),
+        msg  = table_copy_regressive(midi_msg)
+    }
+    --adjust next midi message offset
+    if midi_table[last_idx+1] then
+        midi_table[last_idx+1].offset = dif_next
+    end
+    --insert it 
+    table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
+end
+
+---comment
+---@param midi_table  table table with all midi events
+---@param event_n number event number
+function DeleteMIDI(midi_table,event_n)
+    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,event_n - 1 , midi_table[event_n].offset_count)
+    if midi_table[event_n+1] then
+        midi_table[event_n+1].offset = dif_prev + dif_next
+    end
+    table.remove(midi_table,event_n)
+end
+
+function SetMIDI(midi_table,event_n,ppq,flags,midi_msg)
+    if flags then
+        for key, value in pairs(flags) do
+            midi_table[event_n].flags[key] = value
+        end
+    end
+    if midi_msg then
+        for key, value in pairs(midi_msg) do
+            midi_table[event_n].msg[key] = value
+        end
+    end
+
+    if ppq then
+        local midi_msg = table_copy_regressive(midi_table[event_n].msg)
+        local flags = table_copy_regressive(midi_table[event_n].flags)
+        DeleteMIDI(midi_table,event_n)
+        InsertMIDI(midi_table,ppq,midi_msg,flags)
+    end
+end
+
 ---------------------
 ----------------- MIDI Message Pack 
 ---------------------
@@ -343,60 +425,3 @@ function PackFlags(selected, muted, curve_shape)
     flags = flags|(muted and 2 or 0)|(selected and 1 or 0) -- if selected or muted are true return number. this is a OR operation flags|2or0|1or0 (2 = 10 ; 1 = 1)
     return flags
 end
-
----------------------
------------------ MIDI Table Handling 
----------------------
-
----Insert a midi midi_msg at ppq in the midi_table
----@param midi_table table table with all midi events
----@param pqp number when in ppq insert the message
----@param midi_msg string midi message packed. 
-function InsertMIDI(midi_table,ppq,midi_msg,flags)
-    --Get idx of prev event
-    local last_idx = BinarySearchInMidiTable(midi_table,ppq)
-    local insert_idx = last_idx + 1
-    -- calculate dif of prev event and next evt 
-    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,last_idx,ppq)
-    --create the midi midi_msg table
-    local type, ch, val1, val2, text
-    if type(midi_msg) == 'string' then
-        type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
-    elseif type(midi_msg) == 'table' then
-        type = midi_msg.type
-        ch = midi_msg.ch
-        val1 = midi_msg.val1
-        val2 = midi_msg.val2
-        text = midi_msg.text
-    end
-    local msg_table = {
-        offset = dif_prev,
-        offset_count = ppq,
-        flags = flags,
-        msg  = {
-            {type = type,
-            ch = ch,
-            val1 = val1,
-            val2 = val2,
-            text = text}
-        }
-    }
-    --adjust next midi message offset
-    if midi_table[last_idx+1] then
-        midi_table[last_idx+1].offset = dif_next
-    end
-    --insert it 
-    table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
-end
-
----comment
----@param midi_table  table table with all midi events
----@param event_n number event number
-function DeleteMIDI(midi_table,event_n)
-    local dif_prev, dif_next = CalculatePPQDifPrevNextEvnt(midi_table,event_n - 1 , midi_table[event_n].offset_count)
-    if midi_table[event_n+1] then
-        midi_table[event_n+1].offset = dif_prev + dif_next
-    end
-    table.remove(midi_table,event_n)
-end
-

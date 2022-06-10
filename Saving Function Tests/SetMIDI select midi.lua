@@ -14,11 +14,11 @@ local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
     local retval, MIDIstr = reaper.MIDI_GetAllEvts(take)
     local midi_table = CreateMIDITable(MIDIstr)
-    for i = 1, 1000000000 do
-        InsertMIDI(midi_table,150*i,{type = 11, ch = 1, val1 = 14, val2 = i%127 },{selected = false, muted = (i%2==1), curve_shape = 1})
+    for i = 1, #midi_table do
+        if not midi_table[i].flags.selected then
+            SetMIDI(midi_table,i,nil,{selected = true},nil)
+        end
     end
-
-    print(0)
     local midi_packed = PackMIDITable(midi_table)
     reaper.MIDI_SetAllEvts(take, midi_packed)
 end
