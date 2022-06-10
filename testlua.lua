@@ -1,1 +1,1 @@
-print(true and 15)
+print(0|2)

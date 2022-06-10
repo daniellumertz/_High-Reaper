@@ -243,8 +243,8 @@ end
 ---@return number msg_ch midi message channel
 ---@return number data2 databyte1 -- like note pitch, cc num
 ---@return number data3 databyte2 -- like note velocity, cc val. Some midi messages dont have databyte2 and this will return nill. For getting the value of the pitchbend do databyte1 + databyte2
----@return table allbytes all bytes in a table in order, starting with statusbyte. usefull for longer midi messages like text
 ---@return string text if message is a text return the text
+---@return table allbytes all bytes in a table in order, starting with statusbyte. usefull for longer midi messages like text
 function UnpackMIDIMessage(msg)
     local msg_len = msg:len()
     local pattern = string.rep('B',msg_len)
@@ -292,6 +292,31 @@ function PackMIDIMessage(midi_type,midi_ch,...)
     local midi_ch = midi_ch - 1 -- make it 0 based
     local status_byte = (midi_type*16)+midi_ch -- where is your bitwise operation god now?
     return PackMessage(status_byte,...)
+end
+
+---Unpack flags into selected, muted, curve_shape
+---@param flag number
+---@return boolean selected is selected
+---@return boolean muted is muted
+---@return integer curve_shape curve type 0square, 1linear, 2slow start/end, 3fast start, 4fast end, 5bezier
+function UnpackFlags(flag)
+    local selected =  flag&1 == 1   -- AND operation with  1 (1 in binary) (return the first bit val)
+    local muted =  flag&2 == 2      -- AND operation with 10 (2 in binary) (return the second bit val + 1 bit as 0 I could also move it to the void)
+    -- cc_string
+    local curve_shape = flag>>4 -- Void the first 4 bits as they dont matter for cc curve and get the value. If is flags from something without curve shape like notes will just return 0, as square
+        
+    return selected, muted, curve_shape
+end
+
+---Pack options into flags
+---@param selected boolean is selected
+---@param muted boolean is muted
+---@param curve_shape number curve type 0square, 1linear, 2slow start/end, 3fast start, 4fast end, 5bezier
+---@return integer flags flags number
+function PackFlags(selected, muted, curve_shape)
+    local flags = curve_shape<<4
+    flags = flags|(muted and 2 or 0)|(selected and 1 or 0) -- if selected or muted are true return number. this is a OR operation flags|2or0|1or0 (2 = 10 ; 1 = 1)
+    return flags
 end
 
 ---------------------
@@ -349,6 +374,4 @@ function DeleteMIDI(midi_table,event_n)
     end
     table.remove(midi_table,event_n)
 end
-
-
 
