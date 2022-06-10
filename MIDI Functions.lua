@@ -434,7 +434,7 @@ end
 
 
 ---------------------
------------------ MIDI Ticks Table
+----------------- MIDI Ticks
 ---------------------
 
 function CreateTickTable() -- From JS Multitool THANKS THANKS THANKS!
@@ -458,4 +458,12 @@ function CreateTickTable() -- From JS Multitool THANKS THANKS THANKS!
                                                                                         }) return t[take] end})
 
     return tTimeFromTick, tTickFromTime -- Return related to project time
+end
+
+function SnapToGridPPQ(take,ppq) -- Would be better to use a metatable with time(seconds) as key
+    -- Took from sir duke master Stevie
+    local time = reaper.MIDI_GetProjTimeFromPPQPos(take, ppq) -- convert note start to seconds
+    local closest_grid_time = reaper.SnapToGrid(0, time) -- get closest grid (this function relies on visible grid)
+    local closest_grid_ppq = reaper.MIDI_GetPPQPosFromProjTime(take, closest_grid_time) -- convert closest grid to PPQ
+    return math.floor(closest_grid_ppq+0.5)
 end

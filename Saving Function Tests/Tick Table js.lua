@@ -13,6 +13,16 @@ tTimeFromTick, tTickFromTime = CreateTickTable()
 
 local midi_editor  = reaper.MIDIEditor_GetActive()
 for take in enumMIDITakes(midi_editor, true) do
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
+    print(tTimeFromTick[take][0])
 
 end
 
