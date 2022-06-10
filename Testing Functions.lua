@@ -15,10 +15,12 @@ for take in enumMIDITakes(midi_editor, true) do
     local midi_table = CreateMIDITable(MIDIstr)
     for i = 1, #midi_table do
         if midi_table[i].msg.type == 8 or midi_table[i].msg.type == 9 then
-            midi_table[i].msg.val1 = midi_table[i].msg.val1 + 1
+            midi_table[i].msg.val1 = 60
+            cnt = cnt + 1
+
         end
+
     end
-    cnt = cnt + #midi_table
     local midi_packed = PackMIDITable(midi_table)
     reaper.MIDI_SetAllEvts(take, midi_packed)
 end
