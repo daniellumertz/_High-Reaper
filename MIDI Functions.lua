@@ -91,16 +91,19 @@ function IterateMIDI(MIDIstring,miditype,ch,selected,muted,filter_midiend,start,
                 end
             end
 
+            local msg_sel, msg_mute, msg_curve_shape
+            if (selected ~= nil) or (muted ~= nil) or (msg_curve_shape ~= nil) then -- Only unpack if gonna use, and do it only once!
+                msg_sel, msg_mute, msg_curve_shape = UnpackFlags(flags)
+            end
+            
             -- check selected
-            if selected ~= nil then
-                local msg_sel = tonumber(ToBits(flags):sub(1,1)) == 1 -- ToBits(flags) return flags as a binary number. Each option is a number from left to right: selected, mute. EX: selected not muted = 10 selected and muted = 11. :sub(1,1) get only one of those values.tonumber() == 1 transforms in boolean.  
-                if not (msg_sel == selected) then goto continue end
+            if selected ~= nil and not (msg_sel == selected) then
+                goto continue
             end
 
             -- check muted
-            if muted ~= nil then
-                local msg_mute = tonumber(ToBits(flags):sub(2,2)) == 1 -- ToBits(flags) return flags as a binary number. Each option is a number from left to right: selected, mute. EX: selected not muted = 10 selected and muted = 11. :sub(1,1) get only one of those values.tonumber() == 1 transforms in boolean.  
-                if not (msg_mute == muted) then goto continue end
+            if muted ~= nil and not (msg_mute == muted) then
+                goto continue
             end
 
             -- Start event n filter: --- it is at the end so will only count message that passed all other filters
@@ -150,22 +153,43 @@ end
 ----------------- MIDI Table 
 ---------------------
 
----Receives MIDIstring and returns a table user use to insert, set, delete, modify events. Each key is corresponds to a midi message they are in a table with .offset .offset_Count . flags . msg. After done pack each message and concat the table and MIDI_SetAllEvts. 
+-- Receives MIDIstring and returns a table user use to insert, set, delete, modify events. 
+-- Table structure:
+-- .offset = offset from last event (dont try to change this directly! use insert, delete, set). When packing to set all events it will use this info to build the output MIDI
+-- .offset_Count = offset from item start (dont try to change this directly! use insert, delete, set). Just for reference and using in insert midi, wont be used to build the outputed MIDI.
+-- .flags = table with flags options unpacked 
+    -- flags.selected is selected
+    -- flags.muted is muted
+    -- flags.curve_shape which curve shape  0square, 1linear, 2slow start/end, 3fast start, 4fast end, 5bezier
+-- .msg = table with midi message unpacked 
+    -- msg.type = midi message type 
+    -- msg.ch = midi message channel
+    -- msg.val1 = midi message databyte 1
+    -- msg.val2 = midi message databyte 2
+    -- msg.text = midi text
+-- .stringPos
 ---@param MIDIstring any
 ---@return table
 function CreateMIDITable(MIDIstring)
     local t = { }
-    for offset, offset_count, flags, msg, stringPos in IterateAllMIDI(MIDIstring,false) do -- should I remove the last val?
+    for offset, offset_count, flags, msg, stringPos in IterateAllMIDI(MIDIstring,false) do -- should I remove the last val? NO! User should avoid it. If remove when I pack back it would be missing, unless I always add the message there
         local type, ch, val1, val2, text = UnpackMIDIMessage(msg)
+        local selected, muted, curve_shape = UnpackFlags(flags)
         t[#t+1] = {}
-        t[#t].offset = offset
-        t[#t].offset_count = offset_count
-        t[#t].flags = flags
-        t[#t].msg = {type = type,
-                    ch = ch,
-                    val1 = val1,
-                    val2 = val2,
-                    text = text}
+        t[#t].offset = offset 
+        t[#t].offset_count = offset_count -- 
+        t[#t].flags = {
+            selected = selected,
+            muted = muted,
+            curve_shape = curve_shape
+        }
+        t[#t].msg = {
+            type = type,
+            ch = ch,
+            val1 = val1,
+            val2 = val2,
+            text = text
+        }
         t[#t].stringPos = stringPos -- just for the sake of it (probably wont going to use)
     end
     return t
@@ -178,7 +202,8 @@ function PackMIDITable(midi_table)
     local packed_table = {}
     for i, value in pairs(midi_table) do
         local packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1, midi_table[i].msg.val2,midi_table[i].msg.text) -- Pack MIDI not text
-        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, packed_midi) 
+        local packed_flags = PackFlags(midi_table[i].flags.selected, midi_table[i].flags.muted, midi_table[i].flags.curve_shape)
+        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, packed_flags, packed_midi) 
     end
     return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
 end
