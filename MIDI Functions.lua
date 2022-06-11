@@ -337,37 +337,6 @@ function InsertMIDI(midi_table,ppq,midi_msg,flags)
     table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
 end
 
----Insert MIDI and a placeholder At the end of the table. The midi will happen at ppq from the start of the item. The place holder will compensate back to position the table endded.
----@param midi_table table table with all midi events
----@param ppq number  when in ppq insert the message
----@param midi_msg string midi message packed.
--- table needs to have .offset_count
-function InsertMIDIUnsorted(midi_table,ppq,midi_msg,flags)
-    local last_offset_count
-    if #midi_table > 0  then
-        last_offset_count = midi_table[#midi_table].offset_count -- ppq position of the last element
-    else
-        last_offset_count = 0
-    end
-    local new_offset = ppq - last_offset_count -- Diference between desired position and end. 
-    TableInsertWithPlaceHolder(midi_table,new_offset,ppq,new_offset,midi_msg,flags,nil) -- Insert with new_offset and insert placeholder with -new_offset
-end
-
----Insert MIDI and a placeholder At the end of the table. If want to change the value of something that already was in the list place holder need to be positioned to compensate the diference over the original ppq
-function SetMIDIUnsorted(midi_table,ppq,original_ppq,midi_msg,flags)
-    local last_offset_count
-    if #midi_table > 0  then
-        last_offset_count = midi_table[#midi_table].offset_count -- ppq position of the last element
-    else
-        last_offset_count = 0
-    end
-    local new_offset = ppq - last_offset_count -- Diference between desired position and end. 
-    local delta = ppq - original_ppq 
-    TableInsertWithPlaceHolder(midi_table,new_offset,ppq,delta,midi_msg,flags,nil) -- Insert with new_offset and insert placeholder with -new_offset
-end
-
-
-
 ---comment
 ---@param midi_table  table table with all midi events
 ---@param event_n number event number
@@ -403,6 +372,56 @@ function SetMIDI(midi_table,event_n,ppq,flags,midi_msg)
         InsertMIDI(midi_table,ppq,midi_msg,flags)
     end
 end
+
+---Insert MIDI and a placeholder At the end of the table. The midi will happen at ppq from the start of the item. The place holder will compensate back to position the table endded. table needs to have .offset_count
+---@param midi_table table table with all midi events
+---@param ppq number  when in ppq insert the message
+---@param midi_msg string midi message.
+---@param flags string flags message.
+function InsertMIDIUnsorted(midi_table,ppq,midi_msg,flags)
+    local last_offset_count
+    if #midi_table > 0  then
+        last_offset_count = midi_table[#midi_table].offset_count -- ppq position of the last element
+    else
+        last_offset_count = 0
+    end
+    local new_offset = ppq - last_offset_count -- Diference between desired position and end. 
+    TableInsertWithPlaceHolder(midi_table,new_offset,ppq,new_offset,midi_msg,flags,nil) -- Insert with new_offset and insert placeholder with -new_offset
+end
+
+---Insert MIDI and a placeholder At the end of the table. If want to change the value of something that already was in the list the place holder need to be positioned to compensate the diference over the original ppq. Using InsertMIDIUnsorted will give the wrong result
+---@param midi_table table table with all midi events
+---@param ppq number  when in ppq insert the message
+---@param original_ppq number  when in ppq was the original message
+---@param midi_msg string midi message.
+---@param flags string flags message.
+function SetMIDIUnsorted(midi_table,ppq,original_ppq,midi_msg,flags)
+    local last_offset_count
+    if #midi_table > 0  then
+        last_offset_count = midi_table[#midi_table].offset_count -- ppq position of the last element
+    else
+        last_offset_count = 0
+    end
+    local new_offset = ppq - last_offset_count -- Diference between desired position and end. 
+    local delta = ppq - original_ppq 
+    TableInsertWithPlaceHolder(midi_table,new_offset,ppq,delta,midi_msg,flags,nil) -- Insert with new_offset and insert placeholder with -new_offset
+end
+
+---Use do delete elements that existed previusly, without needing to change any offset. Can insert it a table as last position or change some element to placeholder(that will get deleted) in the list. If going to change put the pos of the element and dont put offset and offset_count
+---@param midi_table any
+---@param offset any
+---@param offset_count any
+---@param pos any
+function InsertPlaceHolder(midi_table,offset,offset_count,pos)
+    if pos and (not offset or not offset_count) then
+        offset = midi_table[offset]
+        offset_count = midi_table[offset_count]
+    end
+    pos = (pos and pos) or (#midi_table+1)
+    local holder = {offset = offset ,msg = '', flags = 0, offset_count = offset_count}
+    midi_table[pos] = holder
+end
+
 
 ---Insert in a table with a place holder. Place holder is always one key after compensating the delta so the offset of the next message dont need to change, or even calculate! e.g: insert a message 960ppq after previous message. would make next message be 960ppq latter. This function will insert the message with offset = 960 and a placeholder with offset = -960, so next message already is with the right offset.  
 ---@param midi_table table with all midi events
