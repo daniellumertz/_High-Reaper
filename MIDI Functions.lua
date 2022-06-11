@@ -474,12 +474,11 @@ end
 ---@param ... number
 ---@return string
 function PackMessage(...)
-    local t = {...}
     local msg = ''
     for i, v in ipairs( { ... } ) do
         local new_val
         if type(v) == 'number' then 
-            new_val = string.pack('B',v)
+            new_val = string.char(v) 
         elseif type(v) == 'string' then -- In case it is a string (useful for midi text where each byte is a character)
             new_val = v
         elseif not v then -- in case some of the messages is nil. No problem! This is useful as PackMIDITable will send .val2 and .text. not all midi have val2 and not all midi have .text
@@ -496,7 +495,7 @@ end
 ---@param ... number sequence of data bytes can be number (will be converted to string(a character with the equivalent byte)) or can be a string that will be added to the message (useful for midi text where each byte is a character).
 function PackMIDIMessage(midi_type,midi_ch,...)
     local midi_ch = midi_ch - 1 -- make it 0 based
-    local status_byte = (midi_type*16)+midi_ch -- where is your bitwise operation god now?
+    local status_byte = (midi_type<<4)+midi_ch -- where is your bitwise operation god now?
     return PackMessage(status_byte,...)
 end
 
@@ -553,10 +552,3 @@ function CreateTickTable() -- From JS Multitool THANKS THANKS THANKS!
     return tTimeFromTick, tTickFromTime -- Return related to project time
 end
 
-function SnapToGridPPQ(take,ppq) -- Would be better to use a metatable with time(seconds) as key
-    -- Took from sir duke master Stevie
-    local time = reaper.MIDI_GetProjTimeFromPPQPos(take, ppq) -- convert ppq to seconds
-    local closest_grid_time = reaper.SnapToGrid(0, time) -- get closest grid (this function relies on visible grid)
-    local closest_grid_ppq = reaper.MIDI_GetPPQPosFromProjTime(take, closest_grid_time) -- convert closest grid to PPQ
-    return math.floor(closest_grid_ppq+0.5)
-end
