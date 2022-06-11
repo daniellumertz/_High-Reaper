@@ -195,6 +195,15 @@ function CreateMIDITable(MIDIstring)
     return t
 end
 
+function CreatePackedMIDITable(MIDIstring)
+    local new_table = {}
+    for offset, offset_count, flags, msg, stringPos in IterateAllMIDI(MIDIstring) do
+        --Unpack MIDI
+        new_table[#new_table+1] = {offset_count = offset_count , offset = offset ,msg = msg, flags = flags} -- new_offset = offset + delta. new  difference from last midi message
+    end
+    return new_table
+end
+
 ---This function get the midi_table and return it to string packed formated to be feeded at MIDI_SetAllEvts
 ---@param midi_table any
 ---@return string
@@ -204,6 +213,17 @@ function PackMIDITable(midi_table)
         local packed_midi = PackMIDIMessage(midi_table[i].msg.type, midi_table[i].msg.ch, midi_table[i].msg.val1, midi_table[i].msg.val2,midi_table[i].msg.text) -- Pack MIDI not text
         local packed_flags = PackFlags(midi_table[i].flags.selected, midi_table[i].flags.muted, midi_table[i].flags.curve_shape)
         packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, packed_flags, packed_midi) 
+    end
+    return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
+end
+
+---This function get the packed midi_table(.msg and .flags are already packed) and return it to string packed formated to be feeded at MIDI_SetAllEvts
+---@param midi_table table midi_table packed
+---@return string
+function PackPackedMIDITable(midi_table)
+    local packed_table = {}
+    for i, value in pairs(midi_table) do
+        packed_table[#packed_table+1] = string.pack("i4Bs4", midi_table[i].offset, midi_table[i].flags, midi_table[i].msg) 
     end
     return table.concat(packed_table) -- I didnt remove the last val at CreateMIDITable so everything should be here! If remove add it here, calculating offset.
 end
@@ -261,12 +281,13 @@ end
 
 ---------------------
 ----------------- MIDI Table Handling 
----------------------
+---------------------grid_linked
 
----Insert a midi midi_msg at ppq in the midi_table
+---Insert a midi midi_msg at ppq in the midi_table. Insert at the right index. And adjusting offsets. Slow. 
 ---@param midi_table table table with all midi events
 ---@param pqp number when in ppq insert the message
----@param midi_msg string midi message packed. 
+---@param midi_msg string midi message packed or not. 
+---@param flags number flags packed or not
 function InsertMIDI(midi_table,ppq,midi_msg,flags)
     --Get idx of prev event
     local last_idx, dif_prev, dif_next
@@ -280,33 +301,33 @@ function InsertMIDI(midi_table,ppq,midi_msg,flags)
     end
     local insert_idx = last_idx + 1
 
-    --create the midi midi_msg table
-    if type(midi_msg) == 'string' then -- If put midi msg packed. but please dont! 
-        local midi_type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
-        midi_msg = {
-            type = midi_type,
-            ch = ch,
-            val1 = val1,
-            val2 = val2,
-            text = text
-        }
-    end
-    --create the midi midi_msg table
-    if type(flags) == 'number' then -- If put flag packed. but please dont! 
-        local selected, muted, curve_shape = UnpackFlags(flags)
-        flags = {
-            selected = selected,
-            muted = muted,
-            curve_shape = curve_shape
-        }
-    end
+    --create the midi midi_msg table. I used this before to always insert unpacked now I insert the same user insert here
+    --[[     if type(midi_msg) == 'string' then -- If put midi msg packed. but please dont! 
+            local midi_type, ch, val1, val2, text = UnpackMIDIMessage(midi_msg)
+            midi_msg = {
+                type = midi_type,
+                ch = ch,
+                val1 = val1,
+                val2 = val2,
+                text = text
+            }
+        end
+        --create the midi midi_msg table
+        if type(flags) == 'number' then -- If put flag packed. but please dont! 
+            local selected, muted, curve_shape = UnpackFlags(flags)
+            flags = {
+                selected = selected,
+                muted = muted,
+                curve_shape = curve_shape
+            }
+        end ]]
 
     --create the msg table
     local msg_table = {
         offset = dif_prev,
         offset_count = ppq,
-        flags = table_copy_regressive(flags),
-        msg  = table_copy_regressive(midi_msg)
+        flags = flags,
+        msg  = midi_msg
     }
     --adjust next midi message offset
     if midi_table[last_idx+1] then
@@ -315,6 +336,37 @@ function InsertMIDI(midi_table,ppq,midi_msg,flags)
     --insert it 
     table.insert(midi_table,insert_idx,msg_table) -- dont need to return as it is using the same table 
 end
+
+---Insert MIDI and a placeholder At the end of the table. The midi will happen at ppq from the start of the item. The place holder will compensate back to position the table endded.
+---@param midi_table table table with all midi events
+---@param ppq number  when in ppq insert the message
+---@param midi_msg string midi message packed.
+-- table needs to have .offset_count
+function InsertMIDIUnsorted(midi_table,ppq,midi_msg,flags)
+    local last_offset_count
+    if #midi_table > 0  then
+        last_offset_count = midi_table[#midi_table].offset_count -- ppq position of the last element
+    else
+        last_offset_count = 0
+    end
+    local new_offset = ppq - last_offset_count -- Diference between desired position and end. 
+    TableInsertWithPlaceHolder(midi_table,new_offset,ppq,new_offset,midi_msg,flags,nil) -- Insert with new_offset and insert placeholder with -new_offset
+end
+
+---Insert MIDI and a placeholder At the end of the table. If want to change the value of something that already was in the list place holder need to be positioned to compensate the diference over the original ppq
+function SetMIDIUnsorted(midi_table,ppq,original_ppq,midi_msg,flags)
+    local last_offset_count
+    if #midi_table > 0  then
+        last_offset_count = midi_table[#midi_table].offset_count -- ppq position of the last element
+    else
+        last_offset_count = 0
+    end
+    local new_offset = ppq - last_offset_count -- Diference between desired position and end. 
+    local delta = ppq - original_ppq 
+    TableInsertWithPlaceHolder(midi_table,new_offset,ppq,delta,midi_msg,flags,nil) -- Insert with new_offset and insert placeholder with -new_offset
+end
+
+
 
 ---comment
 ---@param midi_table  table table with all midi events
@@ -327,22 +379,49 @@ function DeleteMIDI(midi_table,event_n)
 end
 
 function SetMIDI(midi_table,event_n,ppq,flags,midi_msg)
-    if flags then
+    
+    if type(flags) == "table" then
         for key, value in pairs(flags) do
             midi_table[event_n].flags[key] = value
         end
+    elseif type(flags) == "string" then -- packed insert everything
+        midi_table[event_n].flags = flags
     end
-    if midi_msg then
+
+    if type(midi_msg) == "table" then
         for key, value in pairs(midi_msg) do
             midi_table[event_n].msg[key] = value
         end
+    elseif type(midi_msg) == "string" then -- packed insert everything
+        midi_table[event_n].msg = midi_msg
     end
 
     if ppq then
-        local midi_msg = table_copy_regressive(midi_table[event_n].msg)
-        local flags = table_copy_regressive(midi_table[event_n].flags)
+        local midi_msg = midi_table[event_n].msg
+        local flags = midi_table[event_n].flags
         DeleteMIDI(midi_table,event_n)
         InsertMIDI(midi_table,ppq,midi_msg,flags)
+    end
+end
+
+---Insert in a table with a place holder. Place holder is always one key after compensating the delta so the offset of the next message dont need to change, or even calculate! e.g: insert a message 960ppq after previous message. would make next message be 960ppq latter. This function will insert the message with offset = 960 and a placeholder with offset = -960, so next message already is with the right offset.  
+---@param midi_table table with all midi events
+---@param offset number offset from last message 
+---@param offset_count number optional total offset
+---@param delta number distance in ppq from place holder. Inserting delta = offset. Setting delta = offset - old_offset!  negative is the place holder happens after delta ppq. positive place holder happens before delta ppq. 
+---@param midi_msg any --midi message, packed
+---@param flags any --flags message, packed
+---@param pos any -- optional position on the list to be insert. pos = 3 will insert this message at position 3 and Place holder at 4 else will be added at the end of the list. with pos this is slower, optionally you can always insert at the end and calculate the delta from the last element and insert it at the end! 
+function TableInsertWithPlaceHolder(midi_table,offset,offset_count,delta,midi_msg,flags,pos)
+    local message = {offset = offset ,msg = midi_msg, flags = flags, offset_count = offset_count}
+    local offset_count_holder = offset_count and (offset_count - delta) or nil
+    local holder = {offset = -delta ,msg = '', flags = 0, offset_count = offset_count_holder}
+    if not pos then
+        midi_table[#midi_table+1] = message -- new_offset = offset + delta. new  difference from last midi message 
+        midi_table[#midi_table+1] = holder-- put a place holder nothing message that get deleted where this message originally was. so dont need to sort next midi message
+    else
+        table.insert(midi_table,pos,message)
+        table.insert(midi_table,pos+1,holder)
     end
 end
 
@@ -359,11 +438,6 @@ end
 ---@return string text if message is a text return the text
 ---@return table allbytes all bytes in a table in order, starting with statusbyte. usefull for longer midi messages like text
 function UnpackMIDIMessage(msg)
-    local msg_len = msg:len()
-    local pattern = string.rep('B',msg_len)
-    local t = {string.unpack(pattern,msg)}
-    table.remove(t) -- remove last element (it is just concerned with the last character in string.unpack)
-
     local msg_type = msg:byte(1)>>4
     local msg_ch = (msg:byte(1)&0x0F)+1 --msg:byte(1)&0x0F -- 0x0F = 0000 1111 in binary. this is a bitmask. +1 to be 1 based
 
@@ -372,9 +446,9 @@ function UnpackMIDIMessage(msg)
         text = msg:sub(3)
     end
 
-    local val1 = t[2]
-    local val2 = (msg_type ~= 15) and t[3] -- return nil if is text
-    return msg_type,msg_ch,val1,val2,text,t
+    local val1 = msg:byte(2)
+    local val2 = (msg_type ~= 15) and msg:byte(3) -- return nil if is text
+    return msg_type,msg_ch,val1,val2,text,msg
 end
 
 ---Receives numbers(0-255). or strings. and return them in a string as bytes
@@ -427,7 +501,7 @@ end
 ---@param curve_shape number curve type 0square, 1linear, 2slow start/end, 3fast start, 4fast end, 5bezier
 ---@return integer flags flags number
 function PackFlags(selected, muted, curve_shape)
-    local flags = curve_shape<<4
+    local flags = curve_shape and curve_shape<<4 or 0
     flags = flags|(muted and 2 or 0)|(selected and 1 or 0) -- if selected or muted are true return number. this is a OR operation flags|2or0|1or0 (2 = 10 ; 1 = 1)
     return flags
 end
@@ -462,7 +536,7 @@ end
 
 function SnapToGridPPQ(take,ppq) -- Would be better to use a metatable with time(seconds) as key
     -- Took from sir duke master Stevie
-    local time = reaper.MIDI_GetProjTimeFromPPQPos(take, ppq) -- convert note start to seconds
+    local time = reaper.MIDI_GetProjTimeFromPPQPos(take, ppq) -- convert ppq to seconds
     local closest_grid_time = reaper.SnapToGrid(0, time) -- get closest grid (this function relies on visible grid)
     local closest_grid_ppq = reaper.MIDI_GetPPQPosFromProjTime(take, closest_grid_time) -- convert closest grid to PPQ
     return math.floor(closest_grid_ppq+0.5)
