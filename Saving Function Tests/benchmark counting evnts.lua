@@ -1,3 +1,5 @@
+------ Native functions are way faster! Even in long items
+
 --dofile("C:/Users/DSL/AppData/Roaming/REAPER/Scripts/Meus/Debug VS/DL Debug.lua")
 
 local info = debug.getinfo(1,'S')

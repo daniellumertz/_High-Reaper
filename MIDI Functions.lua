@@ -149,6 +149,21 @@ function IterateMIDIBackwards(MIDIstring,miditype,ch,selected,muted,filter_midie
     end
 end
 
+
+function IterateMIDINotes(take)
+    local retval, notecnt, ccevtcnt, textsyxevtcnt = reaper.MIDI_CountEvts(take)
+    local noteidx = -1
+    return function ()
+        noteidx = noteidx + 1
+        local retval, selected, muted, startppqpos, endppqpos, chan, pitch, vel = reaper.MIDI_GetNote(take, noteidx)
+        if retval then 
+            return retval, selected, muted, startppqpos, endppqpos, chan, pitch, vel
+        else
+            return nil
+        end        
+    end    
+end
+
 ---------------------
 ----------------- MIDI Table 
 ---------------------
@@ -444,6 +459,15 @@ function TableInsertWithPlaceHolder(midi_table,offset,offset_count,delta,midi_ms
     end
 end
 
+---Insert in the table normally without changing nothing (just to make a nice abstraction)
+---@param midi_table table with all midi events
+---@param offset number offset from last message 
+---@param offset_count number optional total offset
+---@param flags number --flags message, packed
+---@param msg string midi message packed
+function TableInsert(midi_table,offset,offset_count,flags,msg)
+    midi_table[#midi_table+1] = { offset = offset, offset_count = offset_count, flags = flags, msg = msg}
+end
 ---------------------
 ----------------- MIDI Message Pack 
 ---------------------
@@ -552,3 +576,21 @@ function CreateTickTable() -- From JS Multitool THANKS THANKS THANKS!
     return tTimeFromTick, tTickFromTime -- Return related to project time
 end
 
+---------------------
+----------------- MIDI Count
+---------------------
+
+---Count Selected notes in a midi take
+---@param take take reaper take
+function CountSelectedNotes(take)
+    local cnt = 0
+
+    local retval, notecnt, ccevtcnt, textsyxevtcnt = reaper.MIDI_CountEvts( take )
+    for i = 0, notecnt - 1 do 
+        local retval, selected, muted, startppqpos, endppqpos, chan, pitch, vel = reaper.MIDI_GetNote( take, i )
+        if selected then
+            cnt = cnt + 1
+        end
+    end
+    return cnt
+end
