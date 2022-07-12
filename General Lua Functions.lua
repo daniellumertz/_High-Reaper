@@ -1,5 +1,5 @@
 ---------------------
------------------ Print
+----------------- Print/Debug
 ---------------------
 
 function print(...) 
@@ -23,6 +23,10 @@ function tprint (tbl, indent)
         print(formatting .. tostring(v))
       end
     end
+end
+
+function PrintDeltaTime(start)
+  print(reaper.time_precise()  - start)
 end
 
 ---------------------
@@ -65,6 +69,35 @@ function table_copy_regressive(thing)
       return thing
   end
 end
+
+---Perform a binary search in a sorted table and return the index of the closest value smaller than val  
+---@param t table the table values needs to be sorted. And only using integers as indexes, without gaps 
+---@param val number
+---@return number
+function BinarySearchInTable(t,val)
+  local floor = 1
+  local ceil = #t
+  local i = math.floor(ceil/2)
+  -- Try to get in the edges after the max value and before the min value
+  if t[#t] <= val then return #t end -- check if it is after the last t value 
+  if t[1] > val then return 0 end --check if is before the first value. return 0 if it is
+  -- Try to find in between values
+  while true do
+      -- check if is between t and t[i+1]
+      if t[i+1] and t[i] <= val and val <= t[i+1] then return i end -- check if it is in between two values
+
+      -- change the i (this is not the correct answer)
+      if t[i] > val then
+          ceil = i
+          i = ((i - floor) / 2) + floor
+          i = math.floor(i)
+      elseif t[i] < val then
+          floor = i
+          i = ((ceil - i) / 2) + floor
+          i = math.ceil(i)
+      end    
+  end
+end
 ---------------------
 ----------------- Bit
 ---------------------
@@ -97,3 +130,52 @@ function BitTabtoStr2(t, len) -- transform an BitTab in a String
     return s
 end
 
+---------------------
+----------------- Numbers
+---------------------
+
+---When inter = 1 return val1 when inter = 0 return val2, use decimal values (0-1) to interpolate
+---@param val1 number
+---@param val2 number
+---@param inter number
+---@return number
+function InterpolateBetween2(val1,val2,inter)
+	return (val1*inter)+(val2*(1-inter)) 
+end
+
+---Limit a number between min and max
+---@param number number number to be limited
+---@param min number minimum number
+---@param max number maximum number
+---@return number
+function LimitNumber(number,min,max)
+	if min and number < min then return min end
+	if max and number > max then return max end
+	return number
+end
+
+---------------------
+----------------- MISC
+---------------------
+
+function open_url(url)
+  local OS = reaper.GetOS()
+  if OS == "OSX32" or OS == "OSX64" then
+    os.execute('open "" "' .. url .. '"')
+  else
+    os.execute('start "" "' .. url .. '"')
+  end
+end
+
+---------------------
+----------------- Windows
+---------------------
+
+---Usefull to set Last Touched Param
+function MouseClick() 
+    local x, y = reaper.GetMousePosition()
+    local w = reaper.JS_Window_FromPoint(x, y)
+    local x, y = reaper.JS_Window_ScreenToClient(w, x, y)
+    reaper.JS_WindowMessage_Post(w, "WM_LBUTTONDOWN", 1, 0, x, y)
+    reaper.JS_WindowMessage_Post(w, "WM_LBUTTONUP", 0, 0, x, y)
+end
